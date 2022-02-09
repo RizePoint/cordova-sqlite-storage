@@ -76,6 +76,13 @@ class SQLiteAndroidDatabase
                 "INTERNAL PLUGIN ERROR: deprecated android.os.Build.VERSION not supported: " +
                 android.os.Build.VERSION.SDK_INT);
         }
+        try {
+            Field field = CursorWindow.class.getDeclaredField("sCursorWindowSize");
+            field.setAccessible(true);
+            field.set(null, 100 * 1024 * 1024); //the 100MB is the new size
+        } catch (Exception e) {
+            Log.v("SQLiteAndroidDatabase.open Cursor Window Size ")
+        }
         dbFile = dbfile; // for possible bug workaround
         mydb = SQLiteDatabase.openOrCreateDatabase(dbfile, null);
     }
