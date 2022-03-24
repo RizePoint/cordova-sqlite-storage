@@ -9,6 +9,7 @@ package io.sqlc;
 import android.database.Cursor;
 import android.database.CursorWindow;
 
+import android.database.sqlite.SQLiteBlobTooBigException;
 import android.database.sqlite.SQLiteConstraintException;
 import android.database.sqlite.SQLiteCursor;
 import android.database.sqlite.SQLiteDatabase;
@@ -51,6 +52,9 @@ class SQLiteAndroidDatabase
     private static final Pattern DELETE_TABLE_NAME = Pattern.compile("^\\s*DELETE\\s+FROM\\s+(\\S+)",
             Pattern.CASE_INSENSITIVE);
 
+    private static final Pattern SELECT_TABLE_NAME = Pattern.compile("^\\s*SELECT\\s+(.*)\\s+FROM\\s+(\\S+)\\s*(.*)",
+            Pattern.CASE_INSENSITIVE);
+
     private static final boolean isPostHoneycomb = android.os.Build.VERSION.SDK_INT >= 11;
 
     File dbFile;
@@ -76,13 +80,6 @@ class SQLiteAndroidDatabase
             throw new RuntimeException(
                 "INTERNAL PLUGIN ERROR: deprecated android.os.Build.VERSION not supported: " +
                 android.os.Build.VERSION.SDK_INT);
-        }
-        try {
-            Field field = CursorWindow.class.getDeclaredField("sCursorWindowSize");
-            field.setAccessible(true);
-            field.set(null, 100 * 1024 * 1024); //the 100MB is the new size
-        } catch (Exception e) {
-            // Log.v("SQLiteAndroidDatabase.open Cursor Window Size ");
         }
         dbFile = dbfile; // for possible bug workaround
         mydb = SQLiteDatabase.openOrCreateDatabase(dbfile, null);
@@ -163,50 +160,50 @@ class SQLiteAndroidDatabase
 
                 if (queryType == QueryType.update || queryType == queryType.delete) {
                     // if (isPostHoneycomb) {
-                        SQLiteStatement myStatement = mydb.compileStatement(query);
+                    SQLiteStatement myStatement = mydb.compileStatement(query);
 
-                        if (json_params != null) {
-                            bindArgsToStatement(myStatement, json_params);
-                        }
+                    if (json_params != null) {
+                        bindArgsToStatement(myStatement, json_params);
+                    }
 
-                        int rowsAffected = -1; // (assuming invalid)
+                    int rowsAffected = -1; // (assuming invalid)
 
-                        // Use try & catch just in case android.os.Build.VERSION.SDK_INT >= 11 is lying:
-                        // (Catch SQLiteException here to avoid extra retry)
-                        try {
-                            rowsAffected = myStatement.executeUpdateDelete();
-                            // Indicate valid results:
-                            needRawQuery = false;
-                        } catch (SQLiteConstraintException ex) {
-                            // Indicate problem & stop this query:
-                            ex.printStackTrace();
-                            errorMessage = "constraint failure: " + ex.getMessage();
-                            code = 6; // SQLException.CONSTRAINT_ERR
-                            Log.v("executeSqlBatch", "SQLiteStatement.executeUpdateDelete(): Error=" + errorMessage);
-                            needRawQuery = false;
-                        } catch (SQLiteException ex) {
-                            // Indicate problem & stop this query:
-                            ex.printStackTrace();
-                            errorMessage = ex.getMessage();
-                            Log.v("executeSqlBatch", "SQLiteStatement.executeUpdateDelete(): Error=" + errorMessage);
-                            needRawQuery = false;
-                        } catch (Exception ex) {
-                            // Assuming SDK_INT was lying & method not found:
-                            // do nothing here & try again with raw query.
-                            ex.printStackTrace();
-                            // Log.v("executeSqlBatch", "SQLiteStatement.executeUpdateDelete(): runtime error (fallback to old API): " + errorMessage);
-                            Log.v("SQLiteAndroidDatabase.executeSqlBatchStatement",
+                    // Use try & catch just in case android.os.Build.VERSION.SDK_INT >= 11 is lying:
+                    // (Catch SQLiteException here to avoid extra retry)
+                    try {
+                        rowsAffected = myStatement.executeUpdateDelete();
+                        // Indicate valid results:
+                        needRawQuery = false;
+                    } catch (SQLiteConstraintException ex) {
+                        // Indicate problem & stop this query:
+                        ex.printStackTrace();
+                        errorMessage = "constraint failure: " + ex.getMessage();
+                        code = 6; // SQLException.CONSTRAINT_ERR
+                        Log.v("executeSqlBatch", "SQLiteStatement.executeUpdateDelete(): Error=" + errorMessage);
+                        needRawQuery = false;
+                    } catch (SQLiteException ex) {
+                        // Indicate problem & stop this query:
+                        ex.printStackTrace();
+                        errorMessage = ex.getMessage();
+                        Log.v("executeSqlBatch", "SQLiteStatement.executeUpdateDelete(): Error=" + errorMessage);
+                        needRawQuery = false;
+                    } catch (Exception ex) {
+                        // Assuming SDK_INT was lying & method not found:
+                        // do nothing here & try again with raw query.
+                        ex.printStackTrace();
+                        // Log.v("executeSqlBatch", "SQLiteStatement.executeUpdateDelete(): runtime error (fallback to old API): " + errorMessage);
+                        Log.v("SQLiteAndroidDatabase.executeSqlBatchStatement",
                                 "INTERNAL PLUGIN ERROR: could not do myStatement.executeUpdateDelete(): " + ex.getMessage());
-                            throw(ex);
-                        }
+                        throw(ex);
+                    }
 
-                        // "finally" cleanup myStatement
-                        myStatement.close();
+                    // "finally" cleanup myStatement
+                    myStatement.close();
 
-                        if (rowsAffected != -1) {
-                            queryResult = new JSONObject();
-                            queryResult.put("rowsAffected", rowsAffected);
-                        }
+                    if (rowsAffected != -1) {
+                        queryResult = new JSONObject();
+                        queryResult.put("rowsAffected", rowsAffected);
+                    }
                     // }
 
                     if (needRawQuery) { // for pre-honeycomb behavior
@@ -299,11 +296,32 @@ class SQLiteAndroidDatabase
                     }
                 }
 
+                if (queryType == QueryType.select) {
+                    needRawQuery = false;
+                    try {
+                        queryResult = this.SelectQueryInParts(query, mydb, json_params, 0, 0);
+                    } catch (SQLiteConstraintException ex) {
+                        // report constraint violation error result with the error message
+                        ex.printStackTrace();
+                        errorMessage = "constraint failure: " + ex.getMessage();
+                        code = 6; // SQLException.CONSTRAINT_ERR
+                        Log.v("executeSqlBatch", "Raw query error=" + errorMessage);
+                    } catch (SQLiteException ex) {
+                        // report some other error result with the error message
+                        ex.printStackTrace();
+                        errorMessage = ex.getMessage();
+                        Log.v("executeSqlBatch", "Raw query error=" + errorMessage);
+                    }
+
+                    if (needRowsAffectedCompat) {
+                        queryResult.put("rowsAffected", rowsAffectedCompat);
+                    }
+                }
+
                 // raw query for other statements:
                 if (needRawQuery) {
                     try {
                         queryResult = this.executeSqlStatementQuery(mydb, query, json_params);
-
                     } catch (SQLiteConstraintException ex) {
                         // report constraint violation error result with the error message
                         ex.printStackTrace();
@@ -354,8 +372,110 @@ class SQLiteAndroidDatabase
         }
     }
 
+    private final JSONObject SelectQueryInParts(String query, SQLiteDatabase mydb, JSONArray json_params, int limitFrom, int limit) {
+        // create query with limits
+        JSONObject result = new JSONObject();
+        String errorMessage = "unknown";
+        String limitQuery = query;
+        if (limit != 0) {
+            limitQuery = query + " LIMIT " + limitFrom + ", " + limit;
+        }
+        try {
+            result = this.executeSqlStatementQuery(mydb, limitQuery, json_params);
+        } catch (SQLiteBlobTooBigException ex) {
+            if (limit == 0) {
+                Matcher tableMatcher = SELECT_TABLE_NAME.matcher(query);
+                if (tableMatcher.find()) {
+                    String table = tableMatcher.group(2);
+                    // we currently assume no arguments and where clauses, but that can change later
+                    SQLiteStatement statement = mydb.compileStatement("SELECT count(*) FROM " + table);
+                    limit = (int) statement.simpleQueryForLong();
+                }
+            }
+
+            if (limit > 1) {
+                // if limit is more than 1, we can keep dividing
+                int newLimit = (int) Math.floor(limit / 2);
+                JSONObject part1 = this.SelectQueryInParts(query, mydb, json_params, limitFrom, newLimit);
+                JSONObject part2 = this.SelectQueryInParts(query, mydb, json_params, limitFrom + newLimit, ((limit % 2) == 1) ? (newLimit + 1) : newLimit);
+                try {
+                    JSONArray rows = this.concatArray(part1.getJSONArray("rows"), part2.getJSONArray("rows"));
+                    result.put("rows", rows);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            } else {
+                try {
+                    result = this.getLargeColumnValue(limitQuery, mydb, json_params);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    errorMessage = e.getMessage();
+                    Log.v("executeSqlBatch", "Raw query error=" + errorMessage);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            errorMessage = e.getMessage();
+            Log.v("executeSqlBatch", "Raw query error=" + errorMessage);
+        }
+        return result;
+    }
+
+    private JSONArray concatArray(JSONArray... arrs)
+            throws JSONException {
+        JSONArray result = new JSONArray();
+        for (JSONArray arr : arrs) {
+            for (int i = 0; i < arr.length(); i++) {
+                result.put(arr.get(i));
+            }
+        }
+        return result;
+    }
+
+    private JSONObject getLargeColumnValue(String query, SQLiteDatabase mydb, JSONArray json_params) {
+        JSONObject result = new JSONObject();
+        Matcher tableMatcher = SELECT_TABLE_NAME.matcher(query);
+        if (tableMatcher.find()) {
+            String table = tableMatcher.group(2);
+            String where = tableMatcher.group(3);
+            // add limits
+            try {
+                SQLiteStatement idQuery = mydb.compileStatement("SELECT id FROM " + table + " " + where);
+                this.bindArgsToStatement(idQuery, json_params);
+                int id = (int) idQuery.simpleQueryForLong();
+                SQLiteStatement countQuery = mydb.compileStatement("SELECT length(value) FROM " + table + " WHERE id=" + id);
+                this.bindArgsToStatement(countQuery, json_params);
+                int length = (int) countQuery.simpleQueryForLong();
+                int chunk_size = (int) Math.pow(2, 19);
+                int numSteps = length / chunk_size + 1;
+                StringBuilder sb = new StringBuilder();
+                for (int i = 1; i < length + 1; i += chunk_size) {
+                    if (sb.length() > 1) sb.append(" UNION ALL ");
+                    sb.append("SELECT substr(value,")
+                            .append(String.valueOf(i)).append(",").append(String.valueOf(chunk_size))
+                            .append(") as value FROM ").append(table)
+                            .append(" WHERE id=").append(id).append(" ");
+                }
+                sb.append(";");
+                String theQuery = sb.toString();
+                try {
+                    result = this.executeSqlStatementQueryValueColumn(mydb,theQuery, json_params);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    String errorMessage = e.getMessage();
+                    Log.v("getLargeColumnValue", "Raw query error=" + errorMessage);
+                }
+            } catch(Exception ex) {
+                ex.printStackTrace();
+                String errorMessage = ex.getMessage();
+                Log.v("getLength:getLargeColumnValue", "Raw query error=" + errorMessage);
+            }
+        }
+        return result;
+    }
+
     private final int countRowsAffectedCompat(QueryType queryType, String query, JSONArray json_params,
-                                         SQLiteDatabase mydb) throws JSONException {
+                                              SQLiteDatabase mydb) throws JSONException {
         // quick and dirty way to calculate the rowsAffected in pre-Honeycomb.  just do a SELECT
         // beforehand using the same WHERE clause. might not be perfect, but it's better than nothing
         Matcher whereMatcher = WHERE_CLAUSE.matcher(query);
@@ -446,7 +566,6 @@ class SQLiteAndroidDatabase
     /**
      * Get rows results from query cursor.
      *
-     * @param cur Cursor into query results
      * @return results in string form
      */
     private JSONObject executeSqlStatementQuery(SQLiteDatabase mydb, String query,
@@ -569,6 +688,85 @@ class SQLiteAndroidDatabase
         }
     }
     // */
+
+    /**
+     * Get rows results from query cursor.
+     *
+     * @return results in string form
+     */
+    private JSONObject executeSqlStatementQueryValueColumn(SQLiteDatabase mydb, String query,
+                                                JSONArray paramsAsJson) throws Exception {
+        JSONObject rowsResult = new JSONObject();
+
+        Cursor cur = null;
+        try {
+            String[] params = null;
+
+            params = new String[paramsAsJson.length()];
+
+            for (int j = 0; j < paramsAsJson.length(); j++) {
+                if (paramsAsJson.isNull(j))
+                    params[j] = "";
+                else
+                    params[j] = paramsAsJson.getString(j);
+            }
+
+            cur = mydb.rawQuery(query, params);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            String errorMessage = ex.getMessage();
+            Log.v("executeSqlBatch", "SQLiteAndroidDatabase.executeSql[Batch](): Error=" + errorMessage);
+            throw ex;
+        }
+
+        // If query result has rows
+        if (cur != null && cur.moveToFirst()) {
+            JSONArray rowsArrayResult = new JSONArray();
+            StringBuilder largeData = new StringBuilder("");
+
+            // Build up JSON result object for each row
+            do {
+                JSONObject row = new JSONObject();
+                if (isPostHoneycomb) {
+                    // Use try & catch just in case android.os.Build.VERSION.SDK_INT >= 11 is lying:
+                    try {
+                        largeData.append(cur.getString(0));
+                    }
+                    catch (Exception ex) {
+                        // bindPreHoneycomb(row, key, cur, i);
+                        Log.v("SQLiteAndroidDatabase.executeSqlStatementQuery",
+                                "INTERNAL PLUGIN ERROR: could not bindPostHoneycomb: " + ex.getMessage());
+                        throw(ex);
+                    }
+                } else {
+                    // NOT EXPECTED:
+                    // bindPreHoneycomb(row, key, cur, i);
+                    Log.v("SQLiteAndroidDatabase.executeSqlStatementQuery",
+                            "INTERNAL PLUGIN ERROR: deprecated android.os.Build.VERSION not supported: " + android.os.Build.VERSION.SDK_INT);
+                    throw new RuntimeException(
+                            "INTERNAL PLUGIN ERROR: deprecated android.os.Build.VERSION not supported: " +
+                                    android.os.Build.VERSION.SDK_INT);
+
+                }
+            } while (cur.moveToNext());
+
+            JSONObject row = new JSONObject();
+            String textData = largeData.toString();
+            row.put(cur.getColumnName(0), textData);
+            rowsArrayResult.put(row);
+            try {
+                rowsResult.put("rows", rowsArrayResult);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+
+        if (cur != null) {
+            cur.close();
+        }
+
+        return rowsResult;
+    }
 
     static QueryType getQueryType(String query) {
         Matcher matcher = FIRST_WORD.matcher(query);
