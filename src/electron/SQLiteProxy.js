@@ -139,7 +139,7 @@ function _sqlite3ExecuteSql(db, sql, params) {
         });
       }
     };
-    if (sql.substr(0, 11) === 'INSERT INTO') {
+    if (sql.indexOf('INSERT') === 0) {
       db.run(sql, params, _sqlite3Handler);
     } else {
       db.all(sql, params, _sqlite3Handler);
