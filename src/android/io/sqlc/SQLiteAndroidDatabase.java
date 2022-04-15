@@ -610,6 +610,9 @@ class SQLiteAndroidDatabase
                             // Use try & catch just in case android.os.Build.VERSION.SDK_INT >= 11 is lying:
                             try {
                                 bindPostHoneycomb(row, key, cur, i);
+                                if (row.isNull(key)) {
+                                    throw new SQLiteBlobTooBigException("We have a blobby exception");
+                                }
                             } catch (Exception ex) {
                                 // bindPreHoneycomb(row, key, cur, i);
                                 Log.v("SQLiteAndroidDatabase.executeSqlStatementQuery",
