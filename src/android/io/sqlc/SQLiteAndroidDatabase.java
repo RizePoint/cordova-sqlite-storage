@@ -387,8 +387,9 @@ class SQLiteAndroidDatabase
                 Matcher tableMatcher = SELECT_TABLE_NAME.matcher(query);
                 if (tableMatcher.find()) {
                     String table = tableMatcher.group(2);
+                    String where = tableMatcher.group(3);
                     // we currently assume no arguments and where clauses, but that can change later
-                    SQLiteStatement statement = mydb.compileStatement("SELECT count(*) FROM " + table);
+                    SQLiteStatement statement = mydb.compileStatement("SELECT count(*) FROM " + table + " " + where);
                     limit = (int) statement.simpleQueryForLong();
                 }
             }
