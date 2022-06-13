@@ -41,7 +41,7 @@ function openDatabase(success, error, options) {
   }
 
   try {
-    dbmap[name] = new SQL.Database(!!sqlite3 ? `${__dirname}/../../${name}` : undefined);
+    dbmap[name] = new SQL.Database(!!sqlite3 ? `${cordova.file.dataDirectory}${name}.db` : undefined);
   } catch(e) {
     // INTERNAL OPEN ERROR
     return error(e);
