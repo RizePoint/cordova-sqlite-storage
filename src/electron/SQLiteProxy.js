@@ -184,7 +184,17 @@ function deleteDatabase(success, error, options) {
 
   delete dbmap[dbname];
 
-  setTimeout(success, 0);
+  window.resolveLocalFileSystemURL(cordova.file.dataDirectory, function (dir) {
+    dir.getFile(`${dbname}.db`, {create: false}, function (fileEntry) {
+        fileEntry.remove(function () {
+            setTimeout(success, 0);
+        }, function (error) {
+            setTimeout(success, 0);
+        }, function () {
+            setTimeout(success, 0);
+        });
+    });
+  });
 }
 
 module.exports = {
