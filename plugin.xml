@@ -33,9 +33,8 @@
 
     <!-- electron -->
     <platform name="electron">
-        <js-module src="src/electron/SQLiteProxy.js" name="SQLiteProxy">
-            <runs />
-        </js-module>
+        <framework src="src/electron" />
+        <hook type="after_plugin_install" src="scripts/electron/startRebuild.js" />
     </platform>
 
     <!-- android -->
