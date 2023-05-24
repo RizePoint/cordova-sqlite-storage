@@ -34,7 +34,7 @@
     <!-- electron -->
     <platform name="electron">
         <framework src="src/electron" />
-        <hook type="after_plugin_install" src="scripts/electron/startRebuild.js" />
+        <hook type="before_prepare" src="scripts/electron/startRebuild.js" />
     </platform>
 
     <!-- android -->
