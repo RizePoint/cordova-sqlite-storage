@@ -1,6 +1,7 @@
 const Database = require('better-sqlite3');
 const { app } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 const dataDirectory = app.getPath('userData') + path.sep;
 
@@ -104,17 +105,9 @@ module.exports = {
 
             delete dbmap[dbname];
 
-            window.resolveLocalFileSystemURL(dataDirectory, function (dir) {
-                dir.getFile(`${dbname}.db`, { create: false }, function (fileEntry) {
-                    fileEntry.remove(function () {
-                        setTimeout(resolve, 0);
-                    }, function (error) {
-                        setTimeout(resolve, 0);
-                    }, function () {
-                        setTimeout(resolve, 0);
-                    });
-                });
-            });
+            fs.rm(`${dataDirectory}${dbname}.db`, { force: true }, error => {
+                setTimeout(resolve, 0);
+            })
         })
     }
 
