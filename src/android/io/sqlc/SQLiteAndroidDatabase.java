@@ -447,7 +447,7 @@ class SQLiteAndroidDatabase
                 SQLiteStatement countQuery = mydb.compileStatement("SELECT length(value) FROM " + table + " WHERE id=" + id);
                 this.bindArgsToStatement(countQuery, json_params);
                 int length = (int) countQuery.simpleQueryForLong();
-                int chunk_size = (int) Math.pow(2, 19);
+                int chunk_size = (int) Math.pow(2, 20) - 1;
                 int numSteps = length / chunk_size + 1;
                 StringBuilder sb = new StringBuilder();
                 for (int i = 1; i < length + 1; i += chunk_size) {
