@@ -12,10 +12,10 @@
     "author": "Apache Software Foundation",
     "license": "Apache-2.0",
     "dependencies": {
-        "better-sqlite3": "^8.0.1"
+        "better-sqlite3": "^11.2.1"
     },
     "devDependencies": {
-        "electron-rebuild": "^3.2.9"
+        "@electron/rebuild": "^3.6.0"
     },
     "scripts": {
         "rebuild": "npm i && electron-rebuild"
