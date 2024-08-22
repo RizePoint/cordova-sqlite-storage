@@ -9,13 +9,13 @@ const dbmap = {};
 const closed_dbmap = {};
 module.exports = {
     echoStringValue: function ([options]) {
-        return options[0].value;
+        return options.value;
     },
 
     open: ([options]) => {
         return new Promise((resolve, reject) => {
 
-            var name = options[0].name;
+            var name = options.name;
 
             if (!!dbmap[name]) return setTimeout(function () {
                 reject('INTERNAL OPEN ERROR: db already open for ' + name);
@@ -46,11 +46,11 @@ module.exports = {
 
     backgroundExecuteSqlBatch: ([options]) => {
         return new Promise(async (resolve, reject) => {
-            var dbName = options[0].dbargs.dbname;
+            var dbName = options.dbargs.dbname;
 
             if (!dbmap[dbName]) return reject('INTERNAL ERROR: database not open');
 
-            var e = options[0].executes;
+            var e = options.executes;
 
             var resultList = [];
 
@@ -67,7 +67,7 @@ module.exports = {
     },
 
     close: ([options]) => {
-        var dbname = options[0].path;
+        var dbname = options.path;
 
         var db = dbmap[dbname];
 
@@ -86,7 +86,7 @@ module.exports = {
     delete: ([options]) => {
         return new Promise((resolve, reject) => {
 
-            var dbname = options[0].path;
+            var dbname = options.path;
 
             if (!!closed_dbmap[dbname]) {
                 // XXX TBD causes test timeouts:
